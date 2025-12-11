@@ -44,5 +44,19 @@ resource "azurerm_windows_web_app" "p2asapp" {
   app_settings = { 
     WEBSITE_RUN_FROM_PACKAGE = "1"
    }
+}
 
+resource "azurerm_windows_web_app_slot" "p2appslots" {
+for_each = setsubtract(var.environments, ["Dev"])
+
+  name           =  "greenslot${each.value}"
+  app_service_id = azurerm_windows_web_app.p2asapp[each.key].id
+
+  site_config {
+    always_on = true
+
+    application_stack {
+      dotnet_version = "v8.0"
+    }
+  }
 }
