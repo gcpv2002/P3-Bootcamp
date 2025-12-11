@@ -1,3 +1,12 @@
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "Statefiles"
+    storage_account_name = "statefilesp3"
+    container_name       = "tfstates"
+    key                  = "statefile.tfstate"
+  }
+}
+
 resource "azurerm_resource_group" "p2rg" {
   for_each = var.environments
 
@@ -35,4 +44,5 @@ resource "azurerm_windows_web_app" "p2asapp" {
   app_settings = { 
     WEBSITE_RUN_FROM_PACKAGE = "1"
    }
+
 }
