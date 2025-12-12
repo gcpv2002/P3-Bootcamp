@@ -1,0 +1,58 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  working_dir : '$(System.DefaultWorkingDirectory)/Terraform'
+  azure_subscription: 'Azure subscription 1(5fa73faf-6a16-4e4e-a3c0-a3f4f7415956)'
+
+
+stages:
+  - stage: ProvDeleteAppService
+    displayName: 'Provisioning App Services'
+    jobs:
+      - job: TerraformStage
+        displayName: 'Terraform Stage'
+        steps:
+          - task: TerraformInstaller@1
+            displayName: 'Terraform install'
+            inputs:
+              terraformVersion: 'latest'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform init'
+            inputs:
+              provider: 'azurerm'
+              command: 'init'
+              workingDirectory: '$(working_dir)'
+              backendAzureRmUseEntraIdForAuthentication: false
+              backendServiceArm: '$(azure_subscription)'
+              backendAzureRmResourceGroupName: 'Statefiles'
+              backendAzureRmStorageAccountName: 'statefilesp3'
+              backendAzureRmContainerName: 'tfstates'
+              backendAzureRmKey: 'statefile.tfstate'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform validate'
+            inputs:
+              provider: 'azurerm'
+              command: 'validate'
+              workingDirectory: '$(working_dir)'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform plan'
+            inputs:
+              provider: 'azurerm'
+              command: 'plan'
+              workingDirectory: '$(working_dir)'
+              environmentServiceNameAzureRM: '$(azure_subscription)'
+
+          - task: TerraformTask@5
+            displayName: 'Terraform apply'
+            inputs:
+              provider: 'azurerm'
+              command: 'apply'
+              workingDirectory: '$(working_dir)'
+              commandOptions: '--auto-approve'
+              environmentServiceNameAzureRM: '$(azure_subscription)'

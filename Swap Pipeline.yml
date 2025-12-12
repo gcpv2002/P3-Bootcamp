@@ -1,0 +1,90 @@
+trigger: none
+
+pool:
+  vmImage: ubuntu-latest
+
+variables:
+  azure_subscription: 'Azure subscription 1(5fa73faf-6a16-4e4e-a3c0-a3f4f7415956)'
+  staging_webapp: 'Stagingprojecttwobootcampwebapp'
+  production_webapp: 'Productionprojecttwobootcampwebapp'
+
+  Staging_green_url: 'stagingprojecttwobootcampwebapp-greenslotstaging.azurewebsites.net'
+
+  Production_green_url: 'productionprojecttwobootcampwebapp-greenslotproduction.azurewebsites.net'
+
+stages:
+# Staging Web App
+- stage: StagingHealthCheck
+  displayName: "Staging green slot health check"
+  jobs:
+  - job: CheckWebApp
+    displayName: "Ping Staging green slot"
+    steps:
+    - task: PowerShell@2
+      displayName: "Run health check"
+      inputs:
+        targetType: 'inline'
+        script: |
+          $url = '$(Staging_green_url)'
+          Write-Host "Pinging $url ..."
+          for ($i=0; $i -lt 10; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+              if ($r.StatusCode -eq 200) { 
+                Write-Host "Healthy"
+                exit 0
+              }
+            } catch {
+              Write-Host "Attempt $i failed. Retrying..."
+              Start-Sleep -Seconds 3
+            }
+          }
+          Write-Error "Health check failed"
+          exit 1
+
+    - task: AzureAppServiceManage@0
+      displayName: 'Swapping slots in Staging'
+      inputs:
+        azureSubscription: '$(azure_subscription)'
+        Action: 'Swap Slots'
+        WebAppName: '$(staging_webapp)'
+        ResourceGroupName: 'Staging'
+        SourceSlot: 'greenslotStaging'
+
+# Production Web App
+- stage: ProductionHealthCheck
+  displayName: "Production green slot health check"
+  jobs:
+  - job: CheckWebApp
+    displayName: "Ping Production green slot"
+    steps:
+    - task: PowerShell@2
+      displayName: "Run health check"
+      inputs:
+        targetType: 'inline'
+        script: |
+          $url = '$(Production_green_url)'
+          Write-Host "Pinging $url ..."
+          for ($i=0; $i -lt 10; $i++) {
+            try {
+              $r = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 10
+              if ($r.StatusCode -eq 200) { 
+                Write-Host "Healthy"
+                exit 0
+              }
+            } catch {
+              Write-Host "Attempt $i failed. Retrying..."
+              Start-Sleep -Seconds 3
+            }
+          }
+          Write-Error "Health check failed"
+          exit 1
+
+    - task: AzureAppServiceManage@0
+      displayName: 'Swapping slots in Production'
+      inputs:
+        azureSubscription: '$(azure_subscription)'
+        Action: 'Swap Slots'
+        WebAppName: '$(production_webapp)'
+        ResourceGroupName: 'Production'
+        SourceSlot: 'greenslotProduction'

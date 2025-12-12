@@ -1,0 +1,145 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - Application
+
+variables:
+  sln_location: 'Application/dotnetwebapp/DotNetWebApp.sln'
+  publish_project: 'Application/dotnetwebapp/src/DotNetWebApp/DotNetWebApp.csproj'
+  test_path: 'Application/dotnetwebapp/tests/DotNetWebApp.Tests/DotNetWebApp.Tests.csproj'
+  build_configuration: '--configuration Release'
+  
+  azure_subscription: 'Azure subscription 1(5fa73faf-6a16-4e4e-a3c0-a3f4f7415956)'
+  package_location: '$(Pipeline.Workspace)/drop/DotNetWebApp.zip'
+
+  dev_webapp: 'Devprojecttwobootcampwebapp'
+  staging_webapp: 'Stagingprojecttwobootcampwebapp'
+  production_webapp: 'Productionprojecttwobootcampwebapp'
+  
+pool:
+  vmImage: ubuntu-latest
+
+stages:
+  - stage: CI
+    displayName: 'Building the application'
+    jobs:
+      - job: build
+        displayName: 'Building Application'
+        steps:
+        - task: UseDotNet@2
+          displayName: 'Setting .NET version'
+          inputs:
+            packageType: 'sdk'
+            version: '8.0.x'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Installing dependencies (dotnet restore)'
+          inputs:
+            command: 'restore'
+            projects: '$(sln_location)'
+            feedsToUse: 'select'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Building (dotnet build)'
+          inputs:
+            command: 'build'
+            projects: '$(sln_location)'
+            arguments: '$(build_configuration) --no-restore'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Testing (dotnet test)'
+          inputs:
+            command: 'test'
+            projects: '$(test_path)'
+            arguments: '$(build_configuration)'
+
+        - task: DotNetCoreCLI@2
+          displayName: 'Publishing (dotnet publish)'
+          inputs:
+            command: 'publish'
+            publishWebProjects: false
+            projects: '$(publish_project)'
+            arguments: '$(build_configuration) --output $(Build.ArtifactStagingDirectory)/publish'
+            zipAfterPublish: true
+
+        - task: PublishBuildArtifacts@1
+          displayName: 'Publishing ZIP artifact'
+          inputs:
+            PathtoPublish: "$(Build.ArtifactStagingDirectory)/publish/DotNetWebApp.zip"
+            ArtifactName: "drop"
+            publishLocation: "Container"
+
+
+# deploying Applications
+
+# Deploying to Dev environment
+  - stage: Deploy_Dev
+    displayName: 'Deploying the application'
+    dependsOn: CI
+    jobs:
+      - deployment: DeploytoDev
+        displayName: 'Dev Deployment'
+        environment: 'Dev'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploying to Dev Webapp'
+                inputs:
+                  ConnectionType: 'AzureRM'
+                  azureSubscription: '$(azure_subscription)'
+                  appType: 'webApp'
+                  WebAppName: '$(dev_webapp)'
+                  packageForLinux: '$(package_location)'
+
+# Deploying to Staging environment
+  - stage: Deploy_Staging
+    displayName: 'Deploying the application'
+    dependsOn: Deploy_Dev
+    jobs:
+      - deployment: DeploytoStaging
+        displayName: 'Staging Deployment'
+        environment: 'Staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploying to GREEN slot in Staging Webapp'
+                inputs:
+                  ConnectionType: 'AzureRM'
+                  azureSubscription: '$(azure_subscription)'
+                  appType: 'webApp'
+                  WebAppName: '$(staging_webapp)'
+                  deployToSlotOrASE: true
+                  ResourceGroupName: 'Staging'
+                  SlotName: 'greenslotStaging'
+                  packageForLinux: '$(package_location)'
+
+# Deploying to Production environment
+  - stage: Deploy_Production
+    displayName: 'Deploying the application'
+    dependsOn: Deploy_Staging
+    jobs:
+      - deployment: DeploytoProdcution
+        displayName: 'Production Deployment'
+        environment: 'Production'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+              - task: AzureRmWebAppDeployment@5
+                displayName: 'Deploying to GREEN slot in Production Webapp'
+                inputs:
+                  ConnectionType: 'AzureRM'
+                  azureSubscription: '$(azure_subscription)'
+                  appType: 'webApp'
+                  WebAppName: '$(production_webapp)'
+                  deployToSlotOrASE: true
+                  ResourceGroupName: 'Production'
+                  SlotName: 'greenslotProduction'
+                  packageForLinux: '$(package_location)'
